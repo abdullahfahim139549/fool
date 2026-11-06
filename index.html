@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Payment received</title>
+<style>
+  :root {
+    --bg: #ffe14d;
+    --ink: #1a1030;
+    --pop: #e8316b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #2a1458; --ink: #fff3b0; --pop: #ff6fa5; }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Comic Sans MS", "Chalkboard SE", "Marker Felt", "Trebuchet MS", sans-serif;
+    overflow: hidden;
+  }
+
+  /* ---------- Fake transaction intro ---------- */
+  #pay {
+    position: fixed; inset: 0; z-index: 10;
+    background: #0b3d2e;
+    color: #eafff5;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    transition: opacity .5s, transform .5s;
+  }
+  #pay.gone { opacity: 0; transform: scale(1.15); pointer-events: none; }
+  .card {
+    width: 100%; max-width: 380px;
+    background: #12523f;
+    border-radius: 20px;
+    padding: 28px 24px;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0,0,0,.35);
+  }
+  .status { font-size: 1rem; min-height: 1.5em; opacity: .9; }
+  .amount { font-size: clamp(2.6rem, 14vw, 3.6rem); font-weight: 700; margin: 14px 0; font-variant-numeric: tabular-nums; }
+  .spinner {
+    width: 54px; height: 54px; margin: 0 auto 6px;
+    border: 5px solid rgba(255,255,255,.2);
+    border-top-color: #5dffb4;
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  .tick {
+    display: none;
+    width: 54px; height: 54px; margin: 0 auto 6px;
+    border-radius: 50%; background: #2ee59d; color: #06281d;
+    font-size: 2rem; line-height: 54px; font-weight: 700;
+  }
+  #pay.done .spinner { display: none; }
+  #pay.done .tick { display: block; animation: boing .4s ease-out; }
+  .bar { height: 6px; background: rgba(255,255,255,.15); border-radius: 3px; overflow: hidden; margin: 14px 0 18px; }
+  .bar i { display: block; height: 100%; width: 0; background: #5dffb4; }
+  .rows { text-align: left; font-size: .92rem; border-top: 1px solid rgba(255,255,255,.15); padding-top: 12px; }
+  .rows div { display: flex; justify-content: space-between; padding: 4px 0; opacity: 0; transition: opacity .4s; }
+  .rows div.show { opacity: 1; }
+  .rows span:first-child { opacity: .7; }
+
+  /* ---------- Fool reveal ---------- */
+  main {
+    height: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 24px;
+    position: relative; z-index: 1;
+  }
+  .reveal { max-width: 640px; opacity: 0; transform: scale(.6); }
+  body.revealed .reveal { animation: slam .7s cubic-bezier(.2,1.6,.4,1) forwards; }
+  .emoji { font-size: clamp(4rem, 18vw, 8rem); display: inline-block; animation: wobble 1.4s ease-in-out infinite; }
+  h1 { font-size: clamp(2rem, 8vw, 4rem); line-height: 1.1; margin: 12px 0 8px; }
+  .fool { color: var(--pop); display: inline-block; animation: pop .9s ease-in-out infinite alternate; }
+  p { font-size: clamp(1.1rem, 4vw, 1.6rem); margin: 8px 0 24px; }
+  a.credit {
+    display: inline-block; background: var(--ink); color: var(--bg);
+    text-decoration: none; padding: 12px 22px; border-radius: 999px; font-weight: bold;
+    transition: transform .15s;
+  }
+  a.credit:hover, a.credit:focus-visible { transform: scale(1.08) rotate(-2deg); outline: 3px solid var(--pop); outline-offset: 3px; }
+  .confetti { position: fixed; top: -2rem; font-size: 1.8rem; animation: fall linear infinite; pointer-events: none; z-index: 0; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes boing { from { transform: scale(0); } to { transform: scale(1); } }
+  @keyframes slam { to { opacity: 1; transform: scale(1); } }
+  @keyframes wobble { 0%,100% { transform: rotate(-12deg); } 50% { transform: rotate(12deg); } }
+  @keyframes pop { from { transform: scale(1); } to { transform: scale(1.12); } }
+  @keyframes fall { to { transform: translateY(110vh) rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .emoji, .fool, .confetti, .spinner { animation: none; }
+    #pay { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="pay" role="status" aria-live="polite">
+  <div class="card">
+    <div class="spinner"></div>
+    <div class="tick">✓</div>
+    <div class="status" id="status">Connecting…</div>
+    <div class="amount" id="amount">$0.00</div>
+    <div class="bar"><i id="fill"></i></div>
+    <div class="rows">
+      <div id="r1"><span>From</span><span>Shimul</span></div>
+      <div id="r2"><span>Type</span><span>Instant transfer</span></div>
+      <div id="r3"><span>Transaction ID</span><span id="txid"></span></div>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div class="reveal">
+    <div class="emoji" aria-hidden="true">🤡</div>
+    <h1>You are a great <span class="fool">fool!</span></h1>
+    <p>Fooled by Shimul 😎</p>
+    <a class="credit" href="https://mdabdullahfahim.github.io" target="_blank" rel="noopener">Visit the site</a>
+  </div>
+</main>
+
+<script>
+  var $ = function (id) { return document.getElementById(id); };
+  $("txid").textContent = "TX" + Math.random().toString(36).slice(2, 10).toUpperCase();
+
+  // Stage 1: money counts up to $1,000.00 over ~3 seconds
+  var start = performance.now(), dur = 3000;
+  var msgs = [[0, "Connecting…"], [0.25, "Verifying transfer…"], [0.6, "Receiving payment…"]];
+  function tick(now) {
+    var t = Math.min((now - start) / dur, 1);
+    var eased = 1 - Math.pow(1 - t, 3);
+    $("amount").textContent = "$" + (1000 * eased).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    $("fill").style.width = (t * 100) + "%";
+    for (var i = 0; i < msgs.length; i++) if (t >= msgs[i][0]) $("status").textContent = msgs[i][1];
+    if (t < 1) requestAnimationFrame(tick); else success();
+  }
+  requestAnimationFrame(tick);
+
+  // Stage 2: "success", then reveal the fool page
+  function success() {
+    $("pay").classList.add("done");
+    $("status").textContent = "Payment received successfully!";
+    ["r1", "r2", "r3"].forEach(function (id, i) {
+      setTimeout(function () { $(id).classList.add("show"); }, i * 250);
+    });
+    setTimeout(reveal, 1800);
+  }
+
+  function reveal() {
+    $("pay").classList.add("gone");
+    document.title = "You are a great fool";
+    document.body.classList.add("revealed");
+    var icons = ["🤡", "🎉", "🃏", "🎈", "😜"];
+    for (var i = 0; i < 24; i++) {
+      var s = document.createElement("span");
+      s.className = "confetti";
+      s.textContent = icons[i % icons.length];
+      s.style.left = Math.random() * 100 + "vw";
+      s.style.animationDuration = 4 + Math.random() * 5 + "s";
+      s.style.animationDelay = -Math.random() * 8 + "s";
+      s.setAttribute("aria-hidden", "true");
+      document.body.appendChild(s);
+    }
+    setTimeout(function () { $("pay").style.display = "none"; }, 600);
+  }
+</script>
+</body>
+</html>
